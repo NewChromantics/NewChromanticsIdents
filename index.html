@@ -1,6 +1,7 @@
 <html>
 	<head>
 	<script src="./PopEngine/WebComponent.js" type=module></script>
+	<script src="https://newchromantics.github.io/WebComponent_TreeView/TreeView.js" type=module></script>
 	<style>
 		body
 		{
@@ -30,6 +31,23 @@
 			padding:		2em;
 		}
 		
+		
+		#ParamsTree
+		{
+			background:		#666;
+			color:			#eee;
+			display:		block;
+			position:		fixed;
+			width:			20em;
+			xleft:			50%;
+			xtransform:		translate(-50%);
+			left:			2em;
+			max-width:		90vw;
+			z-index:		1;
+			top:			2em;
+			padding:		2em;
+		}
+		
 		model-viewer,
 		popengine-canvas
 		{
@@ -47,10 +65,12 @@
 	</head>
 	
 	<body>
+		<tree-view id=ParamsTree css="https://newchromantics.github.io/WebComponent_TreeView/TreeView.css"></tree-view>
 		<div id=Error></div>
 		<script>
 			
 			const BakerAppModule = import(`./BakerApp.js`);
+			const ParamsModule = import(`./Params.js`);
 
 			function SetError(Error)
 			{
@@ -68,6 +88,16 @@
 			{
 				const BakerApp = await BakerAppModule;
 				await BakerApp.OnLoadPopEngineCanvas(PopEngineCanvas);
+				const Params = (await ParamsModule).default;
+				
+				const Meta = {};
+				for ( let Key in Params )
+				{
+					Meta[Key] = {Writable:true};
+				}
+				ParamsTree.meta = Meta;
+				ParamsTree.json = Params;
+				ParamsTree.onchanged = (NewParams) => {	Object.assign(Params,NewParams);	};
 			}
 
 		</script>

@@ -2,6 +2,8 @@ import * as Gltf from './PopEngine/PopGltf.js/Gltf.js'
 import {CreateCubeGeometry} from './PopEngine/CommonGeometry.js'
 import {CreateIdentityMatrix} from './PopEngine/Math.js'
 
+import Params from './Params.js'
+
 let PopEngineCanvas = null;
 
 const ClearColour = [0.5,0.4,0.45];
@@ -32,6 +34,7 @@ const BasicFragShader =
 precision highp float;
 in vec2 uv;
 out vec4 FragColor;
+uniform bool RenderSdf;
 
 bool IsAlternativeUv()
 {
@@ -46,6 +49,7 @@ void main()
 {
 	bool AlternativeColour = IsAlternativeUv();
 	float Blue = AlternativeColour?1.0:0.0;
+	Blue = RenderSdf ? 1.0 : Blue;
 	FragColor = vec4(uv,Blue,1);
 }
 `;
@@ -93,7 +97,9 @@ function GetRenderCommands(Camera,ScreenRect)
 	{
 		const Geo = Model;
 		const Shader = 'Basic';
-		const Uniforms = GetCameraUniforms(Camera,ScreenRect);
+		const Uniforms = {};
+		Object.assign( Uniforms, Params );
+		Object.assign( Uniforms, GetCameraUniforms(Camera,ScreenRect) );
 		Uniforms.CameraProjectionTransform = Uniforms.CameraToViewTransform;
 		Uniforms.LocalToWorldTransform = CreateIdentityMatrix();
 		const Draw = ['Draw',Geo,Shader,Uniforms];
