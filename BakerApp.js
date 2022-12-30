@@ -1,6 +1,8 @@
 import * as Gltf from './PopEngine/PopGltf.js/Gltf.js'
-import {CreateCubeGeometry} from './PopEngine/CommonGeometry.js'
-import {CreateIdentityMatrix} from './PopEngine/Math.js'
+import {CreateCubeGeometry,CreateBlitQuadGeometry} from './PopEngine/CommonGeometry.js'
+import {CreateIdentityMatrix,MatrixInverse4x4} from './PopEngine/Math.js'
+import * as BasicShader from './BasicShader.js'
+import * as SdfShader from './SdfShader.js'
 
 import Params from './Params.js'
 
@@ -11,52 +13,13 @@ const ClearColour = [0.5,0.4,0.45];
 let Models = [];
 
 
-const BasicVertexShader =
-`#version 300 es
-precision highp float;
-//	names in GLTF
-in vec3 POSITION;
-in vec2 TEXCOORD_0;
-#define LocalPosition POSITION
-#define LocalUv TEXCOORD_0
-out vec2 uv;
-uniform mat4 LocalToWorldTransform;
-uniform mat4 WorldToCameraTransform;
-uniform mat4 CameraProjectionTransform;
-void main()
-{
-	gl_Position = CameraProjectionTransform * WorldToCameraTransform * LocalToWorldTransform * vec4(LocalPosition,1);
-	uv = LocalUv.xy;
-}
-`;
-const BasicFragShader =
-`#version 300 es
-precision highp float;
-in vec2 uv;
-out vec4 FragColor;
-uniform bool RenderSdf;
-
-bool IsAlternativeUv()
-{
-	float GridSize = 0.5;
-	vec2 GridUv = mod( uv, GridSize ) / GridSize;
-	bool Left = GridUv.x < 0.5;
-	bool Top = GridUv.y < 0.5;
-	return !(Left==Top);	//	top left and bottom right
-}
-
-void main()
-{
-	bool AlternativeColour = IsAlternativeUv();
-	float Blue = AlternativeColour?1.0:0.0;
-	Blue = RenderSdf ? 1.0 : Blue;
-	FragColor = vec4(uv,Blue,1);
-}
-`;
-
 async function GetBasicShader()
 {
-	return [BasicVertexShader,BasicFragShader];
+	return [BasicShader.VertexShader,BasicShader.FragShader];
+}
+async function GetSdfShader()
+{
+	return [SdfShader.VertexShader,SdfShader.FragShader];
 }
 
 async function LoadGltf(Filename)
@@ -90,20 +53,35 @@ function GetRenderCommands(Camera,ScreenRect)
 		const Uniforms = {};
 		Uniforms.CameraToViewTransform = Camera.GetProjectionMatrix(Viewport);
 		Uniforms.WorldToCameraTransform = Camera.GetWorldToCameraMatrix();
+		Uniforms.CameraToWorldTransform = MatrixInverse4x4( Uniforms.WorldToCameraTransform );
+		Uniforms.ViewToCameraTransform = MatrixInverse4x4( Uniforms.CameraToViewTransform );
 		return Uniforms;
 	}
 	
-	for ( let Model of Models )
+	if ( Params.RenderSdf )
 	{
-		const Geo = Model;
-		const Shader = 'Basic';
+		const Geo = 'BlitQuad';
+		const Shader = 'Sdf';
 		const Uniforms = {};
 		Object.assign( Uniforms, Params );
 		Object.assign( Uniforms, GetCameraUniforms(Camera,ScreenRect) );
-		Uniforms.CameraProjectionTransform = Uniforms.CameraToViewTransform;
-		Uniforms.LocalToWorldTransform = CreateIdentityMatrix();
+
 		const Draw = ['Draw',Geo,Shader,Uniforms];
 		Commands.push(Draw);
+	}
+	else
+	{
+		for ( let Model of Models )
+		{
+			const Geo = Model;
+			const Shader = 'Basic';
+			const Uniforms = {};
+			Object.assign( Uniforms, Params );
+			Object.assign( Uniforms, GetCameraUniforms(Camera,ScreenRect) );
+			Uniforms.LocalToWorldTransform = CreateIdentityMatrix();
+			const Draw = ['Draw',Geo,Shader,Uniforms];
+			Commands.push(Draw);
+		}
 	}
 	
 	return Commands;
@@ -116,7 +94,10 @@ export async function OnLoadPopEngineCanvas(Canvas)
 	PopEngineCanvas.ongetrendercommands = GetRenderCommands;
 	
 	PopEngineCanvas.RegisterShader('Basic',GetBasicShader);
+	PopEngineCanvas.RegisterShader('Sdf',GetSdfShader);
 	PopEngineCanvas.RegisterGeometry('Cube',LoadCubeGeometry);
+	PopEngineCanvas.RegisterGeometry('BlitQuad',CreateBlitQuadGeometry);
+	
 	Models.push('Cube');
 	
 }
