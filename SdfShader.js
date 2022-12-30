@@ -26,8 +26,9 @@ uniform mat4 CameraToWorldTransform;
 uniform mat4 ViewToCameraTransform;
 
 in vec4 OutputProjectionPosition;
-
-uniform vec3 WorldLightPosition;
+float Shadowk = 2.100;
+float FloorSize = 50.0;
+vec3 WorldLightPosition = vec3( -13, 20, 7 );
 #define FarZ	100.0
 #define WorldUp	vec3(0,1,0)
 uniform float TimeNormal;
@@ -68,7 +69,7 @@ void GetMouseRay(out vec3 RayPos,out vec3 RayDir)
 void GetWorldRay(out vec3 RayPos,out vec3 RayDir)
 {
 	//	2d -> view
-float Near = 0.01;
+float Near = 0.001;
 float Far = 0.95;
  vec4 ViewPosNear = ViewToCameraTransform * vec4( OutputProjectionPosition.xy, Near, 1.0 );
  vec4 ViewPosFar = ViewToCameraTransform * vec4( OutputProjectionPosition.xy, Far, 1.0 );
@@ -155,7 +156,7 @@ dm_t Map(vec3 Position,vec3 Dir)
 	dm_t d = dm_t(999.0,Mat_None);
 	//d = Closest( d, sdAxiss(Position) );
  d = Closest( d, dm_t( sdBox( Position, vec3(0,0,0), vec3(1,1,1) ), Mat_AxisY) );
- d = Closest( d, dm_t( sdBox( Position, vec3(0,-1,0), vec3(10,0.01,10) ), Mat_AxisX) );
+ d = Closest( d, dm_t( sdBox( Position, vec3(0,-1,0), vec3(FloorSize,0.01,FloorSize) ), Mat_AxisX) );
 	return d;
 }
 float MapDistance(vec3 Position)
@@ -289,13 +290,17 @@ void main()
 	vec4 Colour = GetMaterialColour(HitDistance.w,HitPos,Normal);
 		
 	//Colour.xyz *= mix(1.0,0.7,HitDistance.y);	//	ao from heat
-	
-	float Shadowk = 2.50;
+		
 	vec3 ShadowRayPos = HitPos+Normal*0.1;
 	vec3 ShadowRayDir = normalize(WorldLightPosition-HitPos);
+
+	float Light = 0.0;
+
 	float Shadow = softshadow( ShadowRayPos, ShadowRayDir, Shadowk );
+	Light += Shadow * 0.5;
+	
 	//float Shadow = HardShadow( ShadowRayPos, ShadowRayDir );
-	//Colour.xyz *= mix( ShadowMult, 1.0, Shadow );//Shadow * ShadowMult;
+	Colour.xyz = Colour.xyz * Light;
 	FragColor = Colour;
 
 	if ( Colour.w == 0.0 )	discard;
