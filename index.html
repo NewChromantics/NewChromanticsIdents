@@ -1,0 +1,76 @@
+<html>
+	<head>
+	<script src="./PopEngine/WebComponent.js" type=module></script>
+	<style>
+		body
+		{
+			margin:		0px;
+			padding:	0px;
+			display:	flex;
+			font-family:	sans-serif;
+		}
+		
+		#Error:empty
+		{
+			display:	none;
+		}
+		
+		#Error
+		{
+			background:		#d66;
+			color:			#eee;
+			display:		block;
+			position:		fixed;
+			width:			20em;
+			left:			50%;
+			transform:		translate(-50%);
+			max-width:		90vw;
+			z-index:		1;
+			top:			2em;
+			padding:		2em;
+		}
+		
+		model-viewer,
+		popengine-canvas
+		{
+			flex-grow:	1;
+			/*
+			position:	absolute;
+			width:		400px;
+			height:		400px;
+			left:		100px;
+			top:		100px;
+			*/
+
+		}
+	</style>
+	</head>
+	
+	<body>
+		<div id=Error></div>
+		<script>
+			
+			const BakerAppModule = import(`./BakerApp.js`);
+
+			function SetError(Error)
+			{
+				const ErrorDiv = document.querySelector(`#Error`);
+				ErrorDiv.innerText = `${Error}`;
+			}
+			
+			function OnCanvasLoad(PopEngineCanvas)
+			{
+				PopEngineCanvas.onerror = SetError;
+				Initialise(...arguments).catch(SetError);
+			}
+
+			async function Initialise(PopEngineCanvas)
+			{
+				const BakerApp = await BakerAppModule;
+				await BakerApp.OnLoadPopEngineCanvas(PopEngineCanvas);
+			}
+
+		</script>
+		<popengine-canvas onload="OnCanvasLoad(...arguments)"></popengine-canvas>
+	</body>
+</html>
