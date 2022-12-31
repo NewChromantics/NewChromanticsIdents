@@ -28,10 +28,9 @@ uniform mat4 ViewToCameraTransform;
 in vec4 OutputProjectionPosition;
 uniform float ShadowK;// = 2.100;
 float FloorSize = 50.0;
-vec3 WorldLightPosition = vec3( -13, 20, 7 );
 #define FarZ	100.0
 #define WorldUp	vec3(0,1,0)
-uniform float TimeNormal;
+uniform float TimeSecs;
 uniform bool UserHoverHandle;
 uniform vec2 MouseUv;
 #define Mat_None	0.0
@@ -51,6 +50,22 @@ uniform vec4 AxisPositions[MAX_AXISS];	//	w = size? 0 dont render
 #define AxisSize	0.1
 #define AxisRadius	(AxisSize*0.001)
 #define MAX_STEPS	100
+
+
+#define WorldLightPosition	GetWorldLightPosition()
+vec3 LightOrigin = vec3( -13, 20, 7 );
+uniform float LightRotationRadius;
+uniform float LightRotationAnglesPerSecond;
+
+vec3 GetWorldLightPosition()
+{
+	vec3 LightPos = LightOrigin;
+	float AngleDeg = TimeSecs * LightRotationAnglesPerSecond;
+	LightPos.x += cos( radians(AngleDeg) ) * LightRotationRadius;
+	LightPos.z += sin( radians(AngleDeg) ) * LightRotationRadius;
+	return LightPos;
+}
+
 void GetMouseRay(out vec3 RayPos,out vec3 RayDir)
 {
 	float CameraViewportRatio = RenderTargetRect.w/RenderTargetRect.z;

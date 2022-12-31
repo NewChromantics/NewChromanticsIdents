@@ -3,7 +3,7 @@ import {CreateCubeGeometry,CreateBlitQuadGeometry} from './PopEngine/CommonGeome
 import {CreateIdentityMatrix,MatrixInverse4x4} from './PopEngine/Math.js'
 import * as BasicShader from './BasicShader.js'
 import * as RaymarchShader from './RaymarchShader.js'
-
+import {GetTimeNowMs} from './PopEngine/PopWebApiCore.js'
 import Params from './Params.js'
 
 let PopEngineCanvas = null;
@@ -58,13 +58,16 @@ function GetRenderCommands(Camera,ScreenRect)
 		return Uniforms;
 	}
 	
+	const BaseUniforms = GetCameraUniforms(Camera,ScreenRect);
+	BaseUniforms.TimeSecs = GetTimeNowMs() / 1000.0;
+	
 	if ( Params.RenderRaymarch )
 	{
 		const Geo = 'BlitQuad';
 		const Shader = 'Sdf';
 		const Uniforms = {};
 		Object.assign( Uniforms, Params );
-		Object.assign( Uniforms, GetCameraUniforms(Camera,ScreenRect) );
+		Object.assign( Uniforms, BaseUniforms );
 
 		const Draw = ['Draw',Geo,Shader,Uniforms];
 		Commands.push(Draw);
@@ -77,7 +80,7 @@ function GetRenderCommands(Camera,ScreenRect)
 			const Shader = 'Basic';
 			const Uniforms = {};
 			Object.assign( Uniforms, Params );
-			Object.assign( Uniforms, GetCameraUniforms(Camera,ScreenRect) );
+			Object.assign( Uniforms, BaseUniforms );
 			Uniforms.LocalToWorldTransform = CreateIdentityMatrix();
 			const Draw = ['Draw',Geo,Shader,Uniforms];
 			Commands.push(Draw);
