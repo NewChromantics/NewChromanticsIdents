@@ -2,7 +2,7 @@ import * as Gltf from './PopEngine/PopGltf.js/Gltf.js'
 import {CreateCubeGeometry,CreateBlitQuadGeometry} from './PopEngine/CommonGeometry.js'
 import {CreateIdentityMatrix,MatrixInverse4x4} from './PopEngine/Math.js'
 import * as BasicShader from './BasicShader.js'
-import * as SdfShader from './SdfShader.js'
+import * as RaymarchShader from './RaymarchShader.js'
 
 import Params from './Params.js'
 
@@ -17,9 +17,9 @@ async function GetBasicShader()
 {
 	return [BasicShader.VertexShader,BasicShader.FragShader];
 }
-async function GetSdfShader()
+async function GetRaymarchShader()
 {
-	return [SdfShader.VertexShader,SdfShader.FragShader];
+	return [RaymarchShader.VertexShader,RaymarchShader.FragShader];
 }
 
 async function LoadGltf(Filename)
@@ -58,7 +58,7 @@ function GetRenderCommands(Camera,ScreenRect)
 		return Uniforms;
 	}
 	
-	if ( Params.RenderSdf )
+	if ( Params.RenderRaymarch )
 	{
 		const Geo = 'BlitQuad';
 		const Shader = 'Sdf';
@@ -94,7 +94,7 @@ export async function OnLoadPopEngineCanvas(Canvas)
 	PopEngineCanvas.ongetrendercommands = GetRenderCommands;
 	
 	PopEngineCanvas.RegisterShader('Basic',GetBasicShader);
-	PopEngineCanvas.RegisterShader('Sdf',GetSdfShader);
+	PopEngineCanvas.RegisterShader('Sdf',GetRaymarchShader);
 	PopEngineCanvas.RegisterGeometry('Cube',LoadCubeGeometry);
 	PopEngineCanvas.RegisterGeometry('BlitQuad',CreateBlitQuadGeometry);
 	

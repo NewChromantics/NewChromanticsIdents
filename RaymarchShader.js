@@ -26,7 +26,7 @@ uniform mat4 CameraToWorldTransform;
 uniform mat4 ViewToCameraTransform;
 
 in vec4 OutputProjectionPosition;
-float Shadowk = 2.100;
+uniform float ShadowK;// = 2.100;
 float FloorSize = 50.0;
 vec3 WorldLightPosition = vec3( -13, 20, 7 );
 #define FarZ	100.0
@@ -296,7 +296,7 @@ void main()
 
 	float Light = 0.0;
 
-	float Shadow = softshadow( ShadowRayPos, ShadowRayDir, Shadowk );
+	float Shadow = softshadow( ShadowRayPos, ShadowRayDir, ShadowK );
 	Light += Shadow * 0.5;
 	
 	//float Shadow = HardShadow( ShadowRayPos, ShadowRayDir );

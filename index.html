@@ -19,6 +19,7 @@
 		#Error
 		{
 			background:		#d66;
+			opacity:		80%;
 			color:			#eee;
 			display:		block;
 			position:		fixed;
@@ -34,7 +35,8 @@
 		
 		#ParamsTree
 		{
-			background:		#666;
+			background:		#444;
+			opacity:		80%;
 			color:			#eee;
 			display:		block;
 			position:		fixed;
@@ -70,7 +72,7 @@
 		<script>
 			
 			const BakerAppModule = import(`./BakerApp.js`);
-			const ParamsModule = import(`./Params.js`);
+			const ParamsImport = import(`./Params.js`);
 
 			function SetError(Error)
 			{
@@ -88,12 +90,14 @@
 			{
 				const BakerApp = await BakerAppModule;
 				await BakerApp.OnLoadPopEngineCanvas(PopEngineCanvas);
-				const Params = (await ParamsModule).default;
+				const ParamsModule = await ParamsImport;
+				const Params = ParamsModule.Params;
+				const Meta = ParamsModule.Meta;
 				
-				const Meta = {};
 				for ( let Key in Params )
 				{
-					Meta[Key] = {Writable:true};
+					Meta[Key] = Meta[Key]||{};
+					Meta[Key].Writable = true;
 				}
 				ParamsTree.meta = Meta;
 				ParamsTree.json = Params;
