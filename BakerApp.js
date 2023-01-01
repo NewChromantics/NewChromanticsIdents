@@ -3,28 +3,39 @@ import {CreateCubeGeometry,CreateBlitQuadGeometry} from './PopEngine/CommonGeome
 import {CreateIdentityMatrix,MatrixInverse4x4} from './PopEngine/Math.js'
 import * as BasicShader from './BasicShader.js'
 import * as RaymarchShader from './RaymarchShader.js'
-import {GetTimeNowMs} from './PopEngine/PopWebApiCore.js'
+import * as BakeSdfShader from './BakeSdfShader.js'
+import * as BlitShader from './BlitShader.js'
+import {GetTimeNowMs,Yield} from './PopEngine/PopWebApiCore.js'
 import Params from './Params.js'
+import PopImage from './PopEngine/PopWebImageApi.js'
+import {BakeSdf} from './BakeSdf.js'
 
 let PopEngineCanvas = null;
 
 const ClearColour = [0.5,0.4,0.45];
 
 let Models = [];
+let SdfImage = null;
 
 
 async function GetBasicShader()
 {
 	return [BasicShader.VertexShader,BasicShader.FragShader];
 }
+
 async function GetRaymarchShader()
 {
 	return [RaymarchShader.VertexShader,RaymarchShader.FragShader];
 }
 
-async function LoadGltf(Filename)
+async function GetBakeSdfShader()
 {
-	
+	return [BakeSdfShader.VertexShader,BakeSdfShader.FragShader];
+}
+
+async function GetBlitShader()
+{
+	return [BlitShader.VertexShader,BlitShader.FragShader];
 }
 
 async function LoadCubeGeometry()
@@ -64,7 +75,7 @@ function GetRenderCommands(Camera,ScreenRect)
 	if ( Params.RenderRaymarch )
 	{
 		const Geo = 'BlitQuad';
-		const Shader = 'Sdf';
+		const Shader = 'Raymarch';
 		const Uniforms = {};
 		Object.assign( Uniforms, Params );
 		Object.assign( Uniforms, BaseUniforms );
@@ -87,20 +98,56 @@ function GetRenderCommands(Camera,ScreenRect)
 		}
 	}
 	
+	if ( Params.Debug_DrawSdf && SdfImage )
+	{
+		const Geo = 'BlitQuad';
+		const Shader = 'BlitTexture';
+		const Uniforms = {};
+		Object.assign( Uniforms, Params );
+		Object.assign( Uniforms, BaseUniforms );
+		Uniforms.Image = SdfImage;
+
+		const Draw = ['Draw',Geo,Shader,Uniforms];
+		Commands.push(Draw);
+	}
+	
+	
 	return Commands;
+}
+
+async function UpdateSdfLoop()
+{
+	while ( PopEngineCanvas )
+	{
+		await Yield(100);
+		try
+		{
+			await BakeSdf( PopEngineCanvas, SdfImage, null, Params );
+		}
+		catch(e)
+		{
+			console.warn(e);
+			await Yield(1000);
+		}
+	}
 }
 
 
 export async function OnLoadPopEngineCanvas(Canvas)
 {
+	SdfImage = new PopImage([256,256],'Float4');
+	
 	PopEngineCanvas = Canvas;
 	PopEngineCanvas.ongetrendercommands = GetRenderCommands;
 	
 	PopEngineCanvas.RegisterShader('Basic',GetBasicShader);
-	PopEngineCanvas.RegisterShader('Sdf',GetRaymarchShader);
+	PopEngineCanvas.RegisterShader('Raymarch',GetRaymarchShader);
+	PopEngineCanvas.RegisterShader('BakeSdf',GetBakeSdfShader);
 	PopEngineCanvas.RegisterGeometry('Cube',LoadCubeGeometry);
 	PopEngineCanvas.RegisterGeometry('BlitQuad',CreateBlitQuadGeometry);
-	
+	PopEngineCanvas.RegisterShader('BlitTexture',GetBlitShader);
+
 	Models.push('Cube');
 	
+	UpdateSdfLoop();
 }
