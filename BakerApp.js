@@ -72,6 +72,12 @@ function GetRenderCommands(Camera,ScreenRect)
 	const BaseUniforms = GetCameraUniforms(Camera,ScreenRect);
 	BaseUniforms.TimeSecs = GetTimeNowMs() / 1000.0;
 	
+	const SdfBoundsRadius = Params.SdfBoundsRadius;
+	BaseUniforms.LocalBoundsMin = [-SdfBoundsRadius,-SdfBoundsRadius,-SdfBoundsRadius];
+	BaseUniforms.LocalBoundsMax = [SdfBoundsRadius,SdfBoundsRadius,SdfBoundsRadius];
+	BaseUniforms.SdfImage = SdfImage;
+
+	
 	if ( Params.RenderRaymarch )
 	{
 		const Geo = 'BlitQuad';

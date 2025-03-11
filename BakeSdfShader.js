@@ -22,11 +22,12 @@ precision highp float;
 
 //in vec4 gl_FragCoord;
 
-uniform float	SdfSphereX;
-uniform float	SdfSphereY;
-uniform float	SdfSphereZ;
-uniform float	SdfSphereRadius;
-#define SpherePositionRadius	vec4(SdfSphereX,SdfSphereY,SdfSphereZ,SdfSphereRadius)
+uniform float	SdfSphereXk;
+uniform float	SdfSphereYk;
+uniform float	SdfSphereZk;
+uniform float	SdfSphereRadiusk;
+#define SpherePositionRadius	(vec4(SdfSphereXk,SdfSphereYk,SdfSphereZk,SdfSphereRadiusk)/vec4(1000.0))
+
 
 uniform vec3	LocalBoundsMin;
 uniform vec3	LocalBoundsMax;

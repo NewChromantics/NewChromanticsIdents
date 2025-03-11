@@ -35,15 +35,20 @@ uniform float TimeSecs;
 #define dmh_t	vec3	//	distance material heat
 #define PinkColour		vec3(1,0,1)
 uniform vec4 RenderTargetRect;
-#define MAX_STEPS	100
+
+#define MAX_STEPS	200
+#define NearSurfaceDistance  0.004
 
 #define Mat_None		0.0
 #define Mat_Green		1.0
 #define Mat_Red			2.0
+#define Mat_Blue		3.0
 #define GreenColour		vec3(0,1,0)
 #define GreenSpecular	0.3
 #define RedColour		vec3(1,0,0)
-#define RedSpecular	0.3
+#define RedSpecular		0.3
+#define BlueColour		vec3(0,0,1)
+#define BlueSpecular	0.3
 
 #define WorldLightPosition	GetWorldLightPosition()
 vec3 LightOrigin = vec3( -13, 20, 7 );
@@ -100,6 +105,68 @@ float sdCapsule( vec3 p, vec3 a, vec3 b, float r )
   float h = clamp( dot(pa,ba)/dot(ba,ba), 0.0, 1.0 );
   return length( pa - ba*h ) - r;
 }
+
+uniform sampler2D SdfImage;
+uniform vec3	LocalBoundsMin;
+uniform vec3	LocalBoundsMax;
+#define			SdfPixelSize	textureSize(SdfImage,0)
+#define SDF_LAYERS_X	(SdfPixelSize.x)
+#define SDF_LAYERS_Y	(SdfPixelSize.y / SDF_LAYERS_Z)
+#define SDF_LAYERS_Z	20
+
+float Range(float Min,float Max,float Value)
+{
+	return (Value-Min) / (Max-Min);
+}
+vec3 Range3(vec3 Min,vec3 Max,vec3 Value)
+{
+	return vec3(
+		Range(Min.x,Max.x,Value.x),
+		Range(Min.y,Max.y,Value.y),
+		Range(Min.z,Max.z,Value.z)
+	);
+}
+
+ivec2 SdfPositionToPixelPosition(vec3 SdfPosition)
+{
+	SdfPosition *= vec3(SDF_LAYERS_X,SDF_LAYERS_Y,SDF_LAYERS_Z);
+	float x = SdfPosition.x;
+	float y = SdfPosition.z * float(SDF_LAYERS_Z);
+	y += SdfPosition.y;
+	return ivec2(x,y);
+}
+
+uniform float	SdfSphereXk;
+uniform float	SdfSphereYk;
+uniform float	SdfSphereZk;
+uniform float	SdfSphereRadiusk;
+#define SpherePositionRadius	(vec4(SdfSphereXk,SdfSphereYk,SdfSphereZk,SdfSphereRadiusk)/vec4(1000.0))
+
+
+dm_t sdBakedSdf(vec3 Position)
+{
+	//	distance to bounds
+	vec3 BoundsCenter = mix( LocalBoundsMin, LocalBoundsMax, 0.5 );
+	vec3 BoundsSize = (LocalBoundsMax - LocalBoundsMin) * 0.5;
+	float DistanceToBounds = sdBox( Position, BoundsCenter, BoundsSize );
+
+	//	outside
+	//if ( DistanceToBounds > 0.0 )	return dm_t( DistanceToBounds, Mat_Blue );
+
+	//Position -= BoundsCenter;
+	vec3 SdfPosition = Range3( LocalBoundsMin, LocalBoundsMax, Position );
+
+	ivec2 PixelPosition = SdfPositionToPixelPosition( SdfPosition );
+	float Distance = texelFetch( SdfImage, PixelPosition, 0 ).x;
+
+	//	this needs to be a delta in sdf space, then scale up really
+	//float Distance = length( SpherePositionRadius.xyz + vec3(0.5) - SdfPosition) - (SpherePositionRadius.w/10.0);
+
+	Distance += max( 0.0, DistanceToBounds );
+
+	return dm_t( Distance, Mat_Blue );
+}
+
 dm_t Closest(dm_t a,dm_t b)
 {
 	return a.x < b.x ? a : b;
@@ -107,8 +174,9 @@ dm_t Closest(dm_t a,dm_t b)
 dm_t Map(vec3 Position,vec3 Dir)
 {
 	dm_t d = dm_t(999.0,Mat_None);
- d = Closest( d, dm_t( sdBox( Position, vec3(0,0,0), vec3(1,1,1) ), Mat_Green) );
- d = Closest( d, dm_t( sdBox( Position, vec3(0,-1,0), vec3(FloorSize,0.01,FloorSize) ), Mat_Red) );
+	//d = Closest( d, dm_t( sdBox( Position, vec3(0,0,0), vec3(1,1,1) ), Mat_Green) );
+	//d = Closest( d, dm_t( sdBox( Position, vec3(0,-1,0), vec3(FloorSize,0.01,FloorSize) ), Mat_Red) );
+	d = Closest( d, sdBakedSdf( Position ) );
 	return d;
 }
 float MapDistance(vec3 Position)
@@ -145,7 +213,7 @@ dmh_t GetRayCastDistanceHeatMaterial(vec3 RayPos,vec3 RayDir)
 			//HitMaterial = Mat_Red;
 			break;
 		}
-		if ( StepDistanceMat.x < 0.004 )
+		if ( StepDistanceMat.x < NearSurfaceDistance )
 		{
 			HitMaterial = StepDistanceMat.y;
 			break;
@@ -165,10 +233,7 @@ vec3 GetNormalColour(vec3 Normal)
 	Normal /= 2.0;
 	return Normal;
 }
-float Range(float Min,float Max,float Value)
-{
-	return (Value-Min) / (Max-Min);
-}
+
 vec4 GetLitColour(vec3 WorldPosition,vec3 Normal,vec3 SeedColour,float Specular)
 {
 	//return vec4(SeedColour,1.0);
@@ -190,8 +255,12 @@ vec4 GetLitColour(vec3 WorldPosition,vec3 Normal,vec3 SeedColour,float Specular)
 vec4 GetMaterialColour(float Material,vec3 WorldPos,vec3 WorldNormal)
 {
 	if ( Material == Mat_None )		return vec4(0,0,0,0);
-	if ( Material == Mat_Green )	return GetLitColour( WorldPos, WorldNormal, GreenColour, GreenSpecular );
-	if ( Material == Mat_Red )		return GetLitColour( WorldPos, WorldNormal, RedColour, RedSpecular );
+ //if ( Material == Mat_Green )	return GetLitColour( WorldPos, WorldNormal, GreenColour, GreenSpecular );
+ //if ( Material == Mat_Red )		return GetLitColour( WorldPos, WorldNormal, RedColour, RedSpecular );
+	if ( Material == Mat_Green )	return vec4(GreenColour,1.0);
+	if ( Material == Mat_Red )		return vec4(RedColour,1.0);
+	//if ( Material == Mat_Blue )		return vec4(BlueColour,1.0);
+	if ( Material == Mat_Blue )		return GetLitColour( WorldPos, WorldNormal, BlueColour, BlueSpecular );
 
 	return GetLitColour(WorldPos,WorldNormal,PinkColour,1.0);
 }
@@ -240,6 +309,7 @@ void main()
 
 	//float Shadow = softshadow( ShadowRayPos, ShadowRayDir, ShadowK );
 	float Shadow = HardShadow( ShadowRayPos, ShadowRayDir );
+Shadow = 1.0;
 	Light += Shadow * 0.5;
 
 	Colour.xyz = Colour.xyz * Light;

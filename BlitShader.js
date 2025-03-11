@@ -7,7 +7,7 @@ out vec2 uv;
 void main()
 {
 	gl_Position = vec4( 0, 0, 0, 1 );
-	gl_Position.xy = mix( vec2(-0.2), vec2(0.9), TexCoord );
+	gl_Position.xy = mix( vec2(0.4), vec2(0.9), TexCoord );
 	uv = TexCoord;
 }
 `;
