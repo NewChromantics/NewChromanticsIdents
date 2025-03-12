@@ -1,5 +1,0 @@
-- Load a model (gltf)
-- Generate SDF for model
-- Render SDF
-- Render with shadows
-- Bake shadows

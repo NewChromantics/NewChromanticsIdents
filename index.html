@@ -1,7 +1,8 @@
 <html>
 	<head>
 	<script src="./PopEngine/WebComponent.js" type=module></script>
-	<script src="https://newchromantics.github.io/WebComponent_TreeView/TreeView.js" type=module></script>
+	<!--<script src="https://newchromantics.github.io/WebComponent_TreeView/TreeView.js" type=module></script>-->
+	<script src="./PopEngine/WebComponent_TreeView/TreeView.js" type=module></script>
 	<style>
 		body
 		{
@@ -61,7 +62,6 @@
 			left:		100px;
 			top:		100px;
 			*/
-
 		}
 	</style>
 	</head>
@@ -71,7 +71,7 @@
 		<div id=Error></div>
 		<script>
 			
-			const BakerAppModule = import(`./BakerApp.js`);
+			const AppModule = import(`./DemoApp.js`);
 			const ParamsImport = import(`./Params.js`);
 
 			function SetError(Error)
@@ -88,7 +88,7 @@
 
 			async function Initialise(PopEngineCanvas)
 			{
-				const BakerApp = await BakerAppModule;
+				const BakerApp = await AppModule;
 				await BakerApp.OnLoadPopEngineCanvas(PopEngineCanvas);
 				const ParamsModule = await ParamsImport;
 				const Params = ParamsModule.Params;
@@ -101,7 +101,14 @@
 				}
 				ParamsTree.meta = Meta;
 				ParamsTree.json = Params;
-				ParamsTree.onchanged = (NewParams) => {	Object.assign(Params,NewParams);	};
+				
+				function OnParamsChanged(NewParamsEvent)
+				{
+					const NewParams = NewParamsEvent.detail;
+					console.log(`Params changed...`);
+					Object.assign(Params,NewParams);	
+				}
+				ParamsTree.addEventListener('change', OnParamsChanged );
 			}
 
 		</script>
