@@ -39,6 +39,9 @@ uniform float TextStepY;
 uniform float TextX;
 uniform float TextY;
 
+uniform float TextExtrusion;
+uniform float TextInflation;
+
 bool Inside01(vec2 uv)
 {
  return (uv.x >= 0.0 && uv.y >= 0.0 && uv.x <= 1.0 && uv.y <= 1.0 );

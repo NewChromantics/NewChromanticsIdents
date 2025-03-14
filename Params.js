@@ -21,10 +21,17 @@ Params.LightX = 2;
 Params.LightY = 8;
 Params.LightZ = 6;
 Params.LightRadius = 0.1;
-Params.ShadowHardness = 2.1;
+Params.ShadowHardness = 6.1;
 Params.VignettePow = 0.15;
 Params.RenderFloor = true;
 Params.RenderWall = false;
+
+Params.TextX = 1;
+Params.TextY = 0;
+Params.TextZ = 0;
+Params.TextExtrusion = 0.1;
+Params.TextInflation = 0.0;
+Params.GlyphFalloffDistance = 5;
 
 export const Meta = {};
 Meta.ShadowK = { min:0, max:30 };
@@ -56,3 +63,13 @@ Meta.LightY = {min:-10,max:10,step:0.01};
 Meta.LightZ = {min:-10,max:10,step:0.01};
 Meta.LightRadius = {min:0.1,max:3,step:0.1};
 Meta.ShadowHardness = {min:1.0,max:30,step:0.1};
+
+
+Meta.TextX = {min:-10,max:10,step:0.01};
+Meta.TextY = {min:-10,max:10,step:0.01};
+Meta.TextZ = {min:-10,max:10,step:0.01};
+
+Meta.TextExtrusion = {min:0.0,max:1,step:0.01};
+Meta.TextInflation = {min:0.0,max:0.2,step:0.01};
+
+Meta.GlyphFalloffDistance = {min:0.0,max:10.0,step:0.1};

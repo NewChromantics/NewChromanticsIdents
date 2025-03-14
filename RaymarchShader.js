@@ -81,7 +81,8 @@ uniform float HeadRadius;
 #define GIZMO_LIGHT	1
 
 uniform float VignettePow;
-
+uniform bool RenderFloor;
+uniform bool RenderWall;
 
 float Distance(vec3 a,vec3 b)
 {
@@ -168,60 +169,127 @@ vec3 GetRayPositionAtTime(TRay Ray,float Time)
 }
 
 
+
+
+uniform sampler2D FontSdf;
+uniform float SdfEdgeMin;
+uniform float SdfEdgeWidth;
+
+#define MAX_GLYPHS	300
+#define MAX_STRING_LENGTH	100
+uniform vec4 FontGlyphBounds[MAX_GLYPHS];
+uniform vec4 FontGlyphPresentations[MAX_GLYPHS];
+uniform int StringGlyphs[MAX_STRING_LENGTH];
+uniform int StringLength;
+
+uniform float TextExtrusion;
+uniform float TextInflation;
+uniform float GlyphFalloffDistance;
+
+uniform float TimeSecs;
+uniform float CyclePerSecond;
+
+bool Inside01(vec2 uv)
+{
+ return (uv.x >= 0.0 && uv.y >= 0.0 && uv.x <= 1.0 && uv.y <= 1.0 );
+} 
+
+struct Glyph
+{
+ float x,y,width,height,originX,originY,advance;
+};
+float FontSize = 80.0;
+
+Glyph GetGlyph(int GlyphIndex)
+{
+ vec4 Bounds = FontGlyphBounds[GlyphIndex];
+ return Glyph( Bounds.x, Bounds.y, Bounds.z, Bounds.w, 0.0, 0.0, 0.0 );
+}
+
+float GetGlyphSample(vec2 Charuv,int GlyphIndex)
+{
+ Glyph glyph = GetGlyph( GlyphIndex );
+
+ //	put uv into sample space
+
+ //	origin is baseline tweak
+ //	get glyph as sample coords (ST)
+ vec2 PixelToTexture = vec2(1.0) / vec2( textureSize( FontSdf, 0 ) );
+
+ vec2 topleft = vec2( glyph.x, glyph.y );
+ vec2 bottomright = topleft + vec2( glyph.width, glyph.height );
+ topleft *= PixelToTexture;
+ bottomright *= PixelToTexture;
+
+ //	input is square, glyph is not
+ vec2 Glyphuv = Charuv;
+
+Glyphuv.y = 1.0 - Glyphuv.y;
+ Glyphuv.x *= FontSize / glyph.width;
+ Glyphuv.y *= FontSize / glyph.height;
+Glyphuv.y = 1.0 - Glyphuv.y;
+
+ //	don't sample outside glyphbox
+ Glyphuv = clamp( Glyphuv, 0.0, 1.0 );
+ //if ( !Inside01(Glyphuv) )
+ //	return 99.0;
+
+ //	needed when screen was upside down
+ //Glyphuv.y = 1.0 - Glyphuv.y;
+ 
+ float s = mix( topleft.x, bottomright.x, Glyphuv.x );
+ float t = mix( topleft.y, bottomright.y, Glyphuv.y );
+
+ //	-0.5 so 1.0 inside; 0.0 edge -1 far
+ float SdfSample = texture( FontSdf, vec2(s,t) ).x - 0.5;
+ //	signed disance, is the opposite of that
+ float Distance = -SdfSample;
+
+ return Distance;
+}
+
+float extrudeDist (float d, float w, float y)
+{
+	return length(vec2(max(d, 0.), y - clamp(y, -w, w)))
+		+ min(max(d, abs(y)-w), 0.);
+}
+
 #define PI 3.14159265359
 
-float atan2(float x,float y)
+uniform float TextX,TextY,TextZ;
+
+float DistanceToLetter(vec3 Position)
 {
- return atan( y, x );
+	vec3 LetterPos = vec3(TextX,TextY,TextZ);
+
+	//	move to letter space
+	Position -= LetterPos;
+
+	//	
+	float Distance = length( Position );
+
+	//	sample glpyh
+	int GlyphIndex = StringGlyphs[ int(TimeSecs*CyclePerSecond) % StringLength ];
+
+	//	this assumes 0,0 local space is 0,0 of uv.
+	//	and 1,1, samples bottom left space of glyph
+	//	therefore a glyph is 1x1 in size
+	//	when it returns max distance that must be a max of $PixelFalloff - but what's that in texels...
+	vec2 GlyphLocalCenter = vec2(0.5,0.5);
+	float GlyphDistance = GetGlyphSample( Position.xz-GlyphLocalCenter, GlyphIndex );
+GlyphDistance *= 1.0 / GlyphFalloffDistance;
+
+	//	this distance is an arbritrary 1 max
+	GlyphDistance = max( 0.0, GlyphDistance );
+
+
+	Distance = extrudeDist( GlyphDistance, TextExtrusion, Position.y);
+
+	//	round off by inflating
+	Distance -= TextInflation;
+
+	return Distance;
 }
-
-
-//	https://github.com/SoylentGraham/PopUnityCommon/blob/master/PopCommon.cginc#L298
-vec2 ViewToEquirect(vec3 View3)
-{
- View3 = normalize(View3);
- vec2 longlat = vec2(atan2(View3.x, View3.z) + PI, acos(-View3.y));
- 
- //longlat.x += lerp( 0, UNITY_PI*2, Range( 0, 360, LatitudeOffset ) );
- //longlat.y += lerp( 0, UNITY_PI*2, Range( 0, 360, LongitudeOffset ) );
- 
- vec2 uv = longlat / vec2(2.0 * PI, PI);
- 
- if ( FlipSample )
-  uv.y = 1.0 - uv.y;
- 
- return uv;
-}
-
-void GetMoonHeightLocal(vec3 MoonNormal,out float Height)
-{
- vec2 HeightmapUv = ViewToEquirect( MoonNormal );
- 
- Height = texture( HeightmapTexture, HeightmapUv ).x;
-
- //	debug uv
- //Colour = vec3( HeightmapUv, 0.5 );
- 
- Height *= TerrainHeightScalar;
- 
- /*
- vec3 Rgb;
- vec2 uv = HeightmapUv;
- if ( DrawColour )
-  Rgb = texture( ColourTexture, uv ).xyz;
- else
-  Rgb = vec3( 1.0-uv.x, uv.y, 1.0 );
- 
- if ( DrawHeight )
- {
-  float Brightness = Height * (1.0 / TerrainHeightScalar);
-  Rgb *= Brightness * BrightnessMult;
- }
- Colour = Rgb;
- */
-}
-
-
 
 
 
@@ -328,45 +396,16 @@ vec4 inverseSF( in vec3 p, const in float n )
 float DistanceToHead(vec3 Position)
 {
  return sdSphere( Position, HeadSphere );
- /*
- float lp = length(Position.xyz - HeadSphere.xyz);
- float dmin = lp-1.0;
- {
-  //vec3 w = Position/lp;
-  vec3 Normal = normalize( Position.xyz - HeadSphere.xyz );
-  //vec3 Normal = w;
-  vec4 fibo = inverseSF(Normal, 700.0);
-  float hh = 1.0 - smoothstep(0.05,0.1,length(fibo.xyz-Normal));
-  dmin -= 0.07*hh;
-  //color = vec4(0.05,0.1,0.1,1.0)*hh * (1.0+0.5*sin(fibo.w*111.1));
-  
- }
- return dmin;
- 
- /*
- vec3 PosInHeadSpace = Position - HeadSphere.xyz;
- float DistanceToHeadBounds = length(PosInHeadSpace) - HeadSphere.w;
- if ( DistanceToHeadBounds > 0.0 )
-  return DistanceToHeadBounds;
- 
- //vec2 id = round(p/s);
- //vec2  r = p - s*id;
- float Spacing = 0.5;
- PosInHeadSpace = mod( PosInHeadSpace, Spacing );
- 
- float Dist = distance( PosInHeadSpace, vec3(Spacing*0.5) ) - (HeadRadius * 0.1);
- return Dist;
-  */
 }
 
-uniform bool RenderFloor;
-uniform bool RenderWall;
+
 
 float DistanceToScene(vec3 Position,vec3 RayDirection)
 {
  float Dist = FAR_Z;
  
- Dist = min( Dist, DistanceToHead(Position) );
+Dist = min( Dist, DistanceToLetter(Position) );
+ //Dist = min( Dist, DistanceToHead(Position) );
 if ( RenderFloor )
  Dist = min( Dist, sdFloor(Position,RayDirection) );
 if ( RenderWall )
