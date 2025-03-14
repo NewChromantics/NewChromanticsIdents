@@ -60,7 +60,7 @@ uniform float ShadowHardness;
 #define WorldLightPosition	vec3(LightX,LightY,LightZ)
 #define LightSphere	vec4(LightX,LightY,LightZ,LightRadius)
 
-#define MAX_STEPS	70
+#define MAX_STEPS	50
 #define FAR_Z		300.0
 #define FAR_Z_EPSILON	(FAR_Z-0.01)
 //	bodge as AO colour was tweaked with 40 steps
@@ -174,6 +174,7 @@ vec3 GetRayPositionAtTime(TRay Ray,float Time)
 uniform sampler2D FontSdf;
 uniform float SdfEdgeMin;
 uniform float SdfEdgeWidth;
+uniform float FontSdfFalloff;
 
 #define MAX_GLYPHS	300
 #define MAX_STRING_LENGTH	100
@@ -184,7 +185,6 @@ uniform int StringLength;
 
 uniform float TextExtrusion;
 uniform float TextInflation;
-uniform float GlyphFalloffDistance;
 
 uniform float TimeSecs;
 uniform float CyclePerSecond;
@@ -245,6 +245,18 @@ Glyphuv.y = 1.0 - Glyphuv.y;
  //	signed disance, is the opposite of that
  float Distance = -SdfSample;
 
+	//	make output -1...1
+ Distance *= 2.0;
+
+ //	at this point "distance" is arbritrary. 
+ //	But we should be able to convert it to UV/texels...
+ //	if the original render falloff is F pixels
+ //	then 1==Falloff pixels from edge.
+float FalloffTexelSize = FontSdfFalloff / (FontSize*0.5);
+Distance *= FalloffTexelSize;
+
+ //	view-source:https://evanw.github.io/font-texture-generator/
+
  return Distance;
 }
 
@@ -277,11 +289,9 @@ float DistanceToLetter(vec3 Position)
 	//	when it returns max distance that must be a max of $PixelFalloff - but what's that in texels...
 	vec2 GlyphLocalCenter = vec2(0.5,0.5);
 	float GlyphDistance = GetGlyphSample( Position.xz-GlyphLocalCenter, GlyphIndex );
-GlyphDistance *= 1.0 / GlyphFalloffDistance;
 
 	//	this distance is an arbritrary 1 max
 	GlyphDistance = max( 0.0, GlyphDistance );
-
 
 	Distance = extrudeDist( GlyphDistance, TextExtrusion, Position.y);
 
