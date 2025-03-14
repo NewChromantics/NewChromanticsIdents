@@ -591,6 +591,7 @@ return;
   Colour = vec4( HitPos, 1.0 );
   //Colour = vec4( abs(HitPos), 1.0 );
   Colour = vec4( abs(Normal),1.0);
+Colour = vec4(1,1,1,1);
   
   bool ApplyHardOcclusion = true;
   float ShadowMult = 0.0;	//	shadow colour
