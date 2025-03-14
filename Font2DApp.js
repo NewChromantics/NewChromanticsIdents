@@ -1,6 +1,6 @@
 import {CreateBlitQuadGeometry} from './PopEngine/CommonGeometry.js'
 import {CreateIdentityMatrix,MatrixInverse4x4} from './PopEngine/Math.js'
-import * as ScreenShader from './ScreenShader.js'
+import * as ScreenShader from './Font2DAppShader.js'
 import {GetTimeNowMs,Yield} from './PopEngine/PopWebApiCore.js'
 import Params from './Params.js'
 import PopImage from './PopEngine/PopWebImageApi.js'
