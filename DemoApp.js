@@ -53,6 +53,11 @@ function GetRenderCommands(Camera,ScreenRect)
 		
 		
 		Uniforms.FontSdf = FontSdf_FuturaBold.Image;
+		Uniforms.FontGlyphBounds = FontSdf_FuturaBold.GlyphBoundsUniform;
+		Uniforms.FontGlyphPresentations = FontSdf_FuturaBold.GlyphPresentationsUniform;
+		const Text = 'TheNewChromantics';
+		Uniforms.StringGlyphs = FontSdf_FuturaBold.GetGlyphIndexes(Text);
+		Uniforms.StringLength = Text.length;
 		
 		const Draw = ['Draw',Geo,Shader,Uniforms];
 		Commands.push(Draw);
@@ -65,6 +70,7 @@ function GetRenderCommands(Camera,ScreenRect)
 export async function OnLoadPopEngineCanvas(Canvas)
 {
 	FontSdf_FuturaBold = await LoadSdfFont('FuturaBold');
+	FontSdf_FuturaBold = await LoadSdfFont('FuturaBold_TNC');
 				
 	PopEngineCanvas = Canvas;
 	PopEngineCanvas.ongetrendercommands = GetRenderCommands;

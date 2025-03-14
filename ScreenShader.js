@@ -8,7 +8,7 @@ void main()
 {
 	gl_Position = vec4( 0, 0, 0, 1 );
 	gl_Position.xy = mix( vec2(-1), vec2(1), TexCoord );
-	uv = TexCoord;
+	uv = vec2( TexCoord.x, 1.0 - TexCoord.y );
 }
 `;
 export const FragShader =
@@ -19,22 +19,46 @@ out vec4 FragColor;
 
 uniform vec4 Viewport;
 uniform sampler2D FontSdf;
-uniform float SdfEdgeBlurMin;
-uniform float SdfEdgeBlurWidth;
+uniform float SdfEdgeMin;
+uniform float SdfEdgeWidth;
+
+#define MAX_GLYPHS	300
+#define MAX_STRING_LENGTH	100
+uniform vec4 FontGlyphBounds[MAX_GLYPHS];
+uniform vec4 FontGlyphPresentations[MAX_GLYPHS];
+uniform int StringGlyphs[MAX_STRING_LENGTH];
+uniform float TimeSecs;
+uniform int StringLength;
+uniform float CyclePerSecond;
+uniform float CharacterBoxSize;
+uniform bool ApplyXOffset;
+uniform bool ApplyYOffset;
+
+uniform float TextSize;
+uniform float TextStepY;
+uniform float TextX;
+uniform float TextY;
+
+bool Inside01(vec2 uv)
+{
+ return (uv.x >= 0.0 && uv.y >= 0.0 && uv.x <= 1.0 && uv.y <= 1.0 );
+} 
 
 struct Glyph
 {
 	float x,y,width,height,originX,originY,advance;
 };
-float FontSize = 32.0;
+float FontSize = 80.0;
 
-
-//	"Y":{"x":452,"y":47,"width":37,"height":36,"originX":7,"originY":30,"advance":23},
-Glyph Y_glyph = Glyph( 452.0, 47.0, 37.0, 36.0, 7.0, 30.0, 23.0 );
-
-float GetNSample(vec2 Glyphuv)
+Glyph GetGlyph(int GlyphIndex)
 {
-	Glyph glyph = Y_glyph;
+	vec4 Bounds = FontGlyphBounds[GlyphIndex];
+	return Glyph( Bounds.x, Bounds.y, Bounds.z, Bounds.w, 0.0, 0.0, 0.0 );
+}
+
+float GetGlyphSample(vec2 Charuv,int GlyphIndex)
+{
+	Glyph glyph = GetGlyph( GlyphIndex );
 
 	//	put uv into sample space
 
@@ -47,43 +71,31 @@ float GetNSample(vec2 Glyphuv)
 	topleft *= PixelToTexture;
 	bottomright *= PixelToTexture;
 
-	float s = mix( topleft.x, bottomright.x, Glyphuv.x );
-	float t = 1.0 - mix( topleft.y, bottomright.y, Glyphuv.y );
+	//	input is square, glyph is not
+	vec2 Glyphuv = Charuv;
 
-	float SdfSample = texture( FontSdf, vec2(s,t) ).x - 0.5;
-	float Distance = smoothstep( SdfEdgeBlurMin, SdfEdgeBlurMin+SdfEdgeBlurWidth, SdfSample );
+Glyphuv.y = 1.0 - Glyphuv.y;
+ Glyphuv.x *= FontSize / glyph.width;
+ Glyphuv.y *= FontSize / glyph.height;
+Glyphuv.y = 1.0 - Glyphuv.y;
 
-	return Distance;
-/*	
+	//	don't sample outside glyphbox
+	Glyphuv = clamp( Glyphuv, 0.0, 1.0 );
+	//if ( !Inside01(Glyphuv) )
+	//	return 99.0;
+
+	//	needed when screen was upside down
+	//Glyphuv.y = 1.0 - Glyphuv.y;
 	
-var x0 = x - c.originX;
-	var y0 = y - c.originY;
-	var s0 = c.x / font.width;
-	var t0 = c.y / font.height;
+	float s = mix( topleft.x, bottomright.x, Glyphuv.x );
+	float t = mix( topleft.y, bottomright.y, Glyphuv.y );
 
-	var x1 = x - c.originX + c.width;
-	var y1 = y - c.originY;
-	var s1 = (c.x + c.width) / font.width;
-	var t1 = c.y / font.height;
-
-	var x2 = x - c.originX;
-	var y2 = y - c.originY + c.height;
-	var s2 = c.x / font.width;
-	var t2 = (c.y + c.height) / font.height;
-
-	var x3 = x - c.originX + c.width;
-	var y3 = y - c.originY + c.height;
-	var s3 = (c.x + c.width) / font.width;
-	var t3 = (c.y + c.height) / font.height;
-
-	vertices.push(x0, y0, s0, t0);
-	vertices.push(x1, y1, s1, t1);
-	vertices.push(x3, y3, s3, t3);
-
-	vertices.push(x0, y0, s0, t0);
-	vertices.push(x3, y3, s3, t3);
-	vertices.push(x2, y2, s2, t2);
-*/
+	//	-0.5 so 1.0 inside; 0.0 edge -1 far
+	float SdfSample = texture( FontSdf, vec2(s,t) ).x - 0.5;
+	//	signed disance, is the opposite of that
+	float Distance = -SdfSample;
+	
+	return Distance;
 }
 
 float range(float Min,float Max,float Value)
@@ -99,24 +111,87 @@ vec2 range(vec2 Min,vec2 Max,vec2 Value)
 );
 }
 
+
 void main()
 {
+	vec4 NullBackground = vec4(0,0,0,1);
 	vec4 Background = vec4(0,0,0,1);
+	vec4 Foreground = vec4(uv,0,1);
+
+ 
+
+
+ vec2 PixelToTexture = vec2(1.0) / vec2( textureSize( FontSdf, 0 ) );
+	float TextDistance = 1.0;
+	vec2 TextPos = vec2(TextX,TextY);
+	for ( int t=0;	t<StringLength;	t++ )
+	{
+		int GlyphIndex = StringGlyphs[t];
+		vec4 GlyphBox = vec4( TextPos, TextPos+vec2(TextSize) );
+		vec4 GlyphPres = FontGlyphPresentations[GlyphIndex] / FontSize;
+if ( ApplyXOffset )
+{
+	GlyphBox.x -= GlyphPres.x * TextSize;
+	GlyphBox.z -= GlyphPres.x * TextSize;
+}
+if ( ApplyYOffset )
+{
+float yoff = (1.0 - GlyphPres.y) * TextSize;
+ GlyphBox.y -= yoff;
+ GlyphBox.w -= yoff;
+}
+
+		vec2 Glyphuv = range( GlyphBox.xy, GlyphBox.zw, uv );
+		if ( Inside01(Glyphuv) )
+		{
+			float GlyphDistance = GetGlyphSample( Glyphuv,GlyphIndex );
+			TextDistance = min( TextDistance, GlyphDistance ); 
+
+		//	draw edges
+  float DistTox0 = abs(Glyphuv.x) - 0.02;
+  float DistToy0 = abs(Glyphuv.y) - 0.02;
+  float DistTox1 = abs(Glyphuv.x-1.0) - 0.02;
+  float DistToy1 = abs(Glyphuv.y-1.0) - 0.02;
+  float EdgeDistance = min( min( DistTox0, DistToy0 ), min( DistTox1, DistToy1 ) );
+TextDistance = min( TextDistance, EdgeDistance );
+  }
+
+ float Advance = GlyphPres.z;
+  TextPos.x += Advance * TextSize;
+
+
+TextPos.y += TextStepY * TextSize;
+  //TextPos.x += TextSize * 0.1;
+	}
+
+ TextDistance = smoothstep( SdfEdgeMin, SdfEdgeMin+SdfEdgeWidth, TextDistance );
+
+	FragColor = mix( Foreground, Background, TextDistance );
+	return;
+
+
+
+
+
+
 
 	//	make a square space for a glyph
 	//	todo: correct with viewport to make square
-	vec2 BoxSize = vec2(0.6) / Viewport.zw;
+	vec2 BoxSize = vec2(CharacterBoxSize) / Viewport.zw;
 	vec2 HalfBoxSize = BoxSize / 2.0;
 	vec4 Box = vec4( 0.5-HalfBoxSize.x, 0.5-HalfBoxSize.y, 0.5+HalfBoxSize.x, 0.5+HalfBoxSize.y );
 	vec2 BoxUv = range( Box.xy, Box.zw, uv );
 	if ( BoxUv.x < 0.0 || BoxUv.y < 0.0 || BoxUv.x > 1.0 || BoxUv.y > 1.0 )
 	{
-		FragColor = Background;
+		FragColor = NullBackground;
 		return;
 	}
 
- vec4 Foreground = vec4(uv,0,1);
-	float GlyphDistance = GetNSample(BoxUv);
+ //Glyph glyph = Y_glyph;
+ int StringIndex = int(TimeSecs*CyclePerSecond) % StringLength;
+ int GlyphIndex = StringGlyphs[StringIndex];
+
+	float GlyphDistance = GetGlyphSample(BoxUv,GlyphIndex);
 
 	FragColor = mix( Background, Foreground, GlyphDistance );
 /*
