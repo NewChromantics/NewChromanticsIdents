@@ -13,6 +13,18 @@ Params.TextSize = 0.5;
 Params.TextX = 0.0;
 Params.TextY = 0.0;
 Params.TextStepY = 0.0;
+Params.FloorY = 1;
+Params.WallZ = 1;
+Params.HeadRadius = 1.0;
+Params.BounceSurfaceDistance = 0.02;
+Params.LightX = 2;
+Params.LightY = 8;
+Params.LightZ = 6;
+Params.LightRadius = 0.1;
+Params.ShadowHardness = 2.1;
+Params.VignettePow = 0.15;
+Params.RenderFloor = false;
+Params.RenderWall = false;
 
 export const Meta = {};
 Meta.ShadowK = { min:0, max:30 };
@@ -33,3 +45,14 @@ Meta.TextStepY = { min:0.0, max:1.0, step:0.01 };
 Meta.TextX = { min:0.0, max:1.0, step:0.01 };
 Meta.TextY = { min:0.0, max:1.0, step:0.01 };
 
+
+Meta.HeadRadius = { min:0.0, max:10.0, step:0.01 };
+Meta.FloorY = { min:-10, max:10, step:0.01 };
+Meta.WallZ = { min:-10, max:10, step:0.01 };
+
+Meta.BounceSurfaceDistance = {min:0,max:1,step:0.01};
+Meta.LightX = {min:-10,max:10,step:0.01};
+Meta.LightY = {min:-10,max:10,step:0.01};
+Meta.LightZ = {min:-10,max:10,step:0.01};
+Meta.LightRadius = {min:0.1,max:3,step:0.1};
+Meta.ShadowHardness = {min:1.0,max:30,step:0.1};

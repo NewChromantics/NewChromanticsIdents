@@ -24,297 +24,550 @@ uniform mat4 CameraToViewTransform;
 uniform mat4 WorldToCameraTransform;
 uniform mat4 CameraToWorldTransform;
 uniform mat4 ViewToCameraTransform;
+uniform vec4 Viewport;
 
-in vec4 OutputProjectionPosition;
-uniform float ShadowK;// = 2.100;
-float FloorSize = 50.0;
-#define FarZ	100.0
+//uniform mat4 ScreenToCameraTransform;
+#define ScreenToCameraTransform	ViewToCameraTransform
+
+uniform float TerrainHeightScalar;
+uniform sampler2D HeightmapTexture;
+uniform sampler2D ColourTexture;
+uniform bool SquareStep;
+uniform bool DrawColour;
+uniform bool DrawHeight;
+uniform bool DrawStepHeat;
+uniform bool DrawUv;
+uniform bool ApplyAmbientOcclusionColour;
+uniform bool ApplyHeightColour;
+uniform float AmbientOcclusionMin;
+uniform float AmbientOcclusionMax;
+uniform float BrightnessMult;
+uniform float HeightMapStepBack;
+uniform vec3 BaseColour;
+uniform vec3 BackgroundColour;
+uniform float TextureSampleColourMult;
+uniform float TextureSampleColourAdd;
+const bool FlipSample = true;
+uniform float StepHeatMax;
+uniform float Shadowk;	//	=1.70
+uniform float BounceSurfaceDistance;
+
+uniform float LightX;
+uniform float LightY;
+uniform float LightZ;
+uniform float LightRadius;
+uniform float ShadowHardness;
+#define WorldLightPosition	vec3(LightX,LightY,LightZ)
+#define LightSphere	vec4(LightX,LightY,LightZ,LightRadius)
+
+#define MAX_STEPS	70
+#define FAR_Z		300.0
+#define FAR_Z_EPSILON	(FAR_Z-0.01)
+//	bodge as AO colour was tweaked with 40 steps
+#define STEPHEAT_MAX	( StepHeatMax / (float(MAX_STEPS)/40.0) )
+
+uniform float FloorY;
+uniform float WallZ;
+uniform float HeadX;
+uniform float HeadY;
+uniform float HeadZ;
+uniform float HeadRadius;
+#define HeadSphere	vec4(HeadX,HeadY,HeadZ,HeadRadius)
 #define WorldUp	vec3(0,1,0)
-uniform float TimeSecs;
-#define dm_t	vec2	//	distance material
-#define dmh_t	vec3	//	distance material heat
-#define PinkColour		vec3(1,0,1)
-uniform vec4 RenderTargetRect;
+#define WorldForward	vec3(0,0,1)	
 
-#define MAX_STEPS	200
-#define NearSurfaceDistance  0.004
 
-#define Mat_None		0.0
-#define Mat_Green		1.0
-#define Mat_Red			2.0
-#define Mat_Blue		3.0
-#define GreenColour		vec3(0,1,0)
-#define GreenSpecular	0.3
-#define RedColour		vec3(1,0,0)
-#define RedSpecular		0.3
-#define BlueColour		vec3(0,0,1)
-#define BlueSpecular	0.3
+#define GIZMO_NONE 0
+#define GIZMO_LIGHT	1
 
-#define WorldLightPosition	GetWorldLightPosition()
-vec3 LightOrigin = vec3( -13, 20, 7 );
-uniform float LightRotationRadius;
-uniform float LightRotationAnglesPerSecond;
+uniform float VignettePow;
 
-vec3 GetWorldLightPosition()
+
+float Distance(vec3 a,vec3 b)
 {
-	vec3 LightPos = LightOrigin;
-	float AngleDeg = TimeSecs * LightRotationAnglesPerSecond;
-	LightPos.x += cos( radians(AngleDeg) ) * LightRotationRadius;
-	LightPos.z += sin( radians(AngleDeg) ) * LightRotationRadius;
-	return LightPos;
+ return length( a - b );
 }
 
 
+vec3 ApplyGizmoColour(int Gizmo,vec3 CurrentColour)
+{
+ if ( Gizmo == 0 )
+  return CurrentColour;
+ 
+ return vec3(1,1,1);
+}
+
+struct TRay
+{
+ vec3 Pos;
+ vec3 Dir;
+};
+
+vec3 ScreenToWorld(vec2 uv,float z)
+{
+ float x = mix( -1.0, 1.0, uv.x );
+ float y = mix( 1.0, -1.0, uv.y );
+ vec4 ScreenPos4 = vec4( x, y, z, 1.0 );
+ vec4 CameraPos4 = ScreenToCameraTransform * ScreenPos4;
+ vec4 WorldPos4 = CameraToWorldTransform * CameraPos4;
+ vec3 WorldPos = WorldPos4.xyz / WorldPos4.w;
+ 
+ return WorldPos;
+}
+
+//	gr: returning a TRay, or using TRay as an out causes a very low-precision result...
 void GetWorldRay(out vec3 RayPos,out vec3 RayDir)
 {
-	//	2d -> view
-float Near = 0.001;
-float Far = 0.95;
- vec4 ViewPosNear = ViewToCameraTransform * vec4( OutputProjectionPosition.xy, Near, 1.0 );
- vec4 ViewPosFar = ViewToCameraTransform * vec4( OutputProjectionPosition.xy, Far, 1.0 );
-vec4 WorldPosNear = CameraToWorldTransform * ViewPosNear;
-vec4 WorldPosFar = CameraToWorldTransform * ViewPosFar;
-vec3 WorldPosNear3 = WorldPosNear.xyz / WorldPosNear.w;
-vec3 WorldPosFar3 = WorldPosFar.xyz / WorldPosFar.w;
-
-	RayPos = WorldPosNear3;
-	RayDir = WorldPosFar3 - WorldPosNear3;
-	RayDir = normalize(RayDir);
+ float Near = 0.01;
+ float Far = FAR_Z;
+ RayPos = ScreenToWorld( uv, Near );
+ RayDir = ScreenToWorld( uv, Far ) - RayPos;
+ 
+ //	gr: this is backwards!
+ RayDir = -normalize( RayDir );
+ //RayDir = normalize( RayDir );
+ 
+ //	mega bodge for webxr views
+ //	but, there's something wrong with when we pan (may be using old broken camera code)
+ 
+ if ( RayDir.z < 0.0 )
+ {
+  //RayDir *= -1.0;
+ }
+ 
 }
-float rand(vec3 co)
-{
-	return fract(sin(dot(co, vec3(12.9898, 78.233, 54.53))) * 43758.5453);
-}
-float opUnion( float d1, float d2 )			{ return min(d1,d2); }
-float opSubtraction( float d1, float d2 )	{ return max(-d1,d2); }
-float opIntersection( float d1, float d2 )	{ return max(d1,d2); }
-float sdPlane( vec3 p, vec3 n, float h )	{return dot(p,n) + h;}
-float sdSphere(vec3 Position,vec4 Sphere)
-{
-	return length( Position-Sphere.xyz )-Sphere.w;
-}
-float sdBox( vec3 p, vec3 c, vec3 b )
-{
-	p = p-c;
-	vec3 q = abs(p) - b;
-	return length(max(q,0.0)) + min(max(q.x,max(q.y,q.z)),0.0);
-}
-float sdCapsule( vec3 p, vec3 a, vec3 b, float r )
-{
-  vec3 pa = p - a, ba = b - a;
-  float h = clamp( dot(pa,ba)/dot(ba,ba), 0.0, 1.0 );
-  return length( pa - ba*h ) - r;
-}
-
-uniform sampler2D SdfImage;
-uniform vec3	LocalBoundsMin;
-uniform vec3	LocalBoundsMax;
-#define			SdfPixelSize	textureSize(SdfImage,0)
-#define SDF_LAYERS_X	(SdfPixelSize.x)
-#define SDF_LAYERS_Y	(SdfPixelSize.y / SDF_LAYERS_Z)
-#define SDF_LAYERS_Z	20
 
 float Range(float Min,float Max,float Value)
 {
-	return (Value-Min) / (Max-Min);
+ return (Value-Min) / (Max-Min);
 }
-vec3 Range3(vec3 Min,vec3 Max,vec3 Value)
+float Range01(float Min,float Max,float Value)
 {
-	return vec3(
-		Range(Min.x,Max.x,Value.x),
-		Range(Min.y,Max.y,Value.y),
-		Range(Min.z,Max.z,Value.z)
-	);
+ return clamp(Range(Min,Max,Value),0.0,1.0);
 }
 
-ivec2 SdfPositionToPixelPosition(vec3 SdfPosition)
+vec3 NormalToRedGreen(float Normal)
 {
-	SdfPosition *= vec3(SDF_LAYERS_X,SDF_LAYERS_Y,SDF_LAYERS_Z);
-	float x = SdfPosition.x;
-	float y = SdfPosition.z * float(SDF_LAYERS_Z);
-	y += SdfPosition.y;
-	return ivec2(x,y);
+ if ( Normal < 0.5 )
+ {
+  Normal /= 0.5;
+  return vec3( 1.0, Normal, 0.0 );
+ }
+ else
+ {
+  Normal -= 0.5;
+  Normal /= 0.5;
+  return vec3( 1.0-Normal, 1.0, 0.0 );
+ }
 }
 
-uniform float	SdfSphereXk;
-uniform float	SdfSphereYk;
-uniform float	SdfSphereZk;
-uniform float	SdfSphereRadiusk;
-#define SpherePositionRadius	(vec4(SdfSphereXk,SdfSphereYk,SdfSphereZk,SdfSphereRadiusk)/vec4(1000.0))
 
-
-dm_t sdBakedSdf(vec3 Position)
+vec3 GetRayPositionAtTime(TRay Ray,float Time)
 {
-	//	distance to bounds
-	vec3 BoundsCenter = mix( LocalBoundsMin, LocalBoundsMax, 0.5 );
-	vec3 BoundsSize = (LocalBoundsMax - LocalBoundsMin) * 0.5;
-	float DistanceToBounds = sdBox( Position, BoundsCenter, BoundsSize );
-
-	//	outside
-	//if ( DistanceToBounds > 0.0 )	return dm_t( DistanceToBounds, Mat_Blue );
-
-	//Position -= BoundsCenter;
-	vec3 SdfPosition = Range3( LocalBoundsMin, LocalBoundsMax, Position );
-
-	ivec2 PixelPosition = SdfPositionToPixelPosition( SdfPosition );
-	float Distance = texelFetch( SdfImage, PixelPosition, 0 ).x;
-
-	//	this needs to be a delta in sdf space, then scale up really
-	//float Distance = length( SpherePositionRadius.xyz + vec3(0.5) - SdfPosition) - (SpherePositionRadius.w/10.0);
-
-	Distance += max( 0.0, DistanceToBounds );
-
-	return dm_t( Distance, Mat_Blue );
+ return Ray.Pos + ( Ray.Dir * Time );
 }
 
-dm_t Closest(dm_t a,dm_t b)
+
+#define PI 3.14159265359
+
+float atan2(float x,float y)
 {
-	return a.x < b.x ? a : b;
+ return atan( y, x );
 }
-dm_t Map(vec3 Position,vec3 Dir)
+
+
+//	https://github.com/SoylentGraham/PopUnityCommon/blob/master/PopCommon.cginc#L298
+vec2 ViewToEquirect(vec3 View3)
 {
-	dm_t d = dm_t(999.0,Mat_None);
-	//d = Closest( d, dm_t( sdBox( Position, vec3(0,0,0), vec3(1,1,1) ), Mat_Green) );
-	//d = Closest( d, dm_t( sdBox( Position, vec3(0,-1,0), vec3(FloorSize,0.01,FloorSize) ), Mat_Red) );
-	d = Closest( d, sdBakedSdf( Position ) );
-	return d;
+ View3 = normalize(View3);
+ vec2 longlat = vec2(atan2(View3.x, View3.z) + PI, acos(-View3.y));
+ 
+ //longlat.x += lerp( 0, UNITY_PI*2, Range( 0, 360, LatitudeOffset ) );
+ //longlat.y += lerp( 0, UNITY_PI*2, Range( 0, 360, LongitudeOffset ) );
+ 
+ vec2 uv = longlat / vec2(2.0 * PI, PI);
+ 
+ if ( FlipSample )
+  uv.y = 1.0 - uv.y;
+ 
+ return uv;
 }
+
+void GetMoonHeightLocal(vec3 MoonNormal,out float Height)
+{
+ vec2 HeightmapUv = ViewToEquirect( MoonNormal );
+ 
+ Height = texture( HeightmapTexture, HeightmapUv ).x;
+
+ //	debug uv
+ //Colour = vec3( HeightmapUv, 0.5 );
+ 
+ Height *= TerrainHeightScalar;
+ 
+ /*
+ vec3 Rgb;
+ vec2 uv = HeightmapUv;
+ if ( DrawColour )
+  Rgb = texture( ColourTexture, uv ).xyz;
+ else
+  Rgb = vec3( 1.0-uv.x, uv.y, 1.0 );
+ 
+ if ( DrawHeight )
+ {
+  float Brightness = Height * (1.0 / TerrainHeightScalar);
+  Rgb *= Brightness * BrightnessMult;
+ }
+ Colour = Rgb;
+ */
+}
+
+
+
+
+
+float sdSphere(vec3 Position,vec4 Sphere)
+{
+ return length( Position-Sphere.xyz )-Sphere.w;
+}
+
+float sdPlane( vec3 p, vec3 n, float h )
+{
+ // n must be normalized
+ n = normalize(n);
+ return dot(p,n) + h;
+}
+
+
+//vec2 sdFloor(vec3 Position,vec3 Direction)
+float sdFloor(vec3 Position,vec3 Direction)
+{
+ //return vec2(999.0,0.0);//	should fail to render a floor
+ float d = sdPlane(Position,WorldUp,FloorY);
+ float tp1 = ( Position.y <= FloorY ) ? 1.0 : 0.0;
+ /*
+  float tp1 = (Position.y-FloorY)/Direction.y;
+  if ( tp1 > 0.0 )
+  {
+  //d = tp1;	//	gr: why is sdPlane distance wrong? but right in map() 
+  tp1 = 1.0;
+  }
+  else
+  {
+  //d = 99.9;
+  tp1 = 0.0;
+  }
+  */
+ //return vec2(d,tp1);
+ return d;
+}
+
+float sdWall(vec3 Position,vec3 Direction)
+{
+ //return vec2(999.0,0.0);//	should fail to render a floor
+ float d = sdPlane(Position,WorldForward,WallZ);
+ //float tp1 = ( Position.z <= WallZ ) ? 1.0 : 0.0;
+ /*
+  float tp1 = (Position.y-FloorY)/Direction.y;
+  if ( tp1 > 0.0 )
+  {
+  //d = tp1;	//	gr: why is sdPlane distance wrong? but right in map() 
+  tp1 = 1.0;
+  }
+  else
+  {
+  //d = 99.9;
+  tp1 = 0.0;
+  }
+  */
+ //return vec2(d,tp1);
+ return d;
+}
+
+
+/*
+// modified Keinert et al's inverse Spherical Fibonacci Mapping
+//	p is normal to center
+//	n is subdivisions
+vec4 inverseSF( in vec3 p, const in float n )
+{
+ //const float PI = 3.14159265359;
+ float PHI = 1.61803398875;
+ float phi = min(atan(p.y,p.x),PI);
+ float k   = max(floor(log(n*PI*sqrt(5.0)*(1.-p.z*p.z))/log(PHI+1.)),2.0);
+ float Fk = pow(PHI,k)/sqrt(5.0);
+ 
+ vec2  F   = vec2( round(Fk), round(Fk*PHI) );
+  
+ 
+ vec2  G   = PI*(fract((F+1.0)*PHI)-(PHI-1.0));    
+ 
+ mat2 iB = mat2(F.y,-F.x,G.y,-G.x)/(F.y*G.x-F.x*G.y);
+ vec2 c = floor(iB*0.5*vec2(phi,n*p.z-n+1.0));
+ 
+ float ma = 0.0;
+ vec4 res = vec4(0);
+ for( int s=0; s<4; s++ )
+ {
+  vec2 uv = vec2(s&1,s>>1);
+  float i = dot(F,uv+c);
+  float phi = 2.0*PI*fract(i*PHI);
+  float cT = 1.0 - (2.0*i+1.0)/n;
+  float sT = sqrt(1.0-cT*cT);
+  vec3 q = vec3(cos(phi)*sT, sin(phi)*sT,cT);
+  float a = dot(p,q);
+  if (a > ma)
+  {
+   ma = a;
+   res.xyz = q;
+   res.w = i;
+  }
+ }
+ return res;
+}
+*/
+float DistanceToHead(vec3 Position)
+{
+ return sdSphere( Position, HeadSphere );
+ /*
+ float lp = length(Position.xyz - HeadSphere.xyz);
+ float dmin = lp-1.0;
+ {
+  //vec3 w = Position/lp;
+  vec3 Normal = normalize( Position.xyz - HeadSphere.xyz );
+  //vec3 Normal = w;
+  vec4 fibo = inverseSF(Normal, 700.0);
+  float hh = 1.0 - smoothstep(0.05,0.1,length(fibo.xyz-Normal));
+  dmin -= 0.07*hh;
+  //color = vec4(0.05,0.1,0.1,1.0)*hh * (1.0+0.5*sin(fibo.w*111.1));
+  
+ }
+ return dmin;
+ 
+ /*
+ vec3 PosInHeadSpace = Position - HeadSphere.xyz;
+ float DistanceToHeadBounds = length(PosInHeadSpace) - HeadSphere.w;
+ if ( DistanceToHeadBounds > 0.0 )
+  return DistanceToHeadBounds;
+ 
+ //vec2 id = round(p/s);
+ //vec2  r = p - s*id;
+ float Spacing = 0.5;
+ PosInHeadSpace = mod( PosInHeadSpace, Spacing );
+ 
+ float Dist = distance( PosInHeadSpace, vec3(Spacing*0.5) ) - (HeadRadius * 0.1);
+ return Dist;
+  */
+}
+
+uniform bool RenderFloor;
+uniform bool RenderWall;
+
+float DistanceToScene(vec3 Position,vec3 RayDirection)
+{
+ float Dist = FAR_Z;
+ 
+ Dist = min( Dist, DistanceToHead(Position) );
+if ( RenderFloor )
+ Dist = min( Dist, sdFloor(Position,RayDirection) );
+if ( RenderWall )
+ Dist = min( Dist, sdWall(Position,RayDirection) );
+ 
+ return Dist;
+}
+
+//	return gizmo code of an object in front of the current traced ray
+int GetGizmo(TRay Ray,vec4 CurrentHitPosition)
+{
+ float DistanceToHit = distance( Ray.Pos, CurrentHitPosition.xyz ); 
+ float DistanceToLight = sdSphere( Ray.Pos, LightSphere );
+
+ if ( DistanceToLight < DistanceToHit )
+ {
+  //	move the ray, did it actually hit
+  vec3 NearLightPos = Ray.Pos + Ray.Dir * DistanceToLight;
+  DistanceToLight = sdSphere( NearLightPos, LightSphere );
+  if ( DistanceToLight < 0.01 )
+   return GIZMO_LIGHT;
+ }
+ 
+ return GIZMO_NONE;
+}
+
+//	returns hitpos,success
+vec4 RayMarchScene(TRay Ray)
+{
+ const float MinDistance = 0.01;
+ const float CloseEnough = MinDistance;
+ const float MinStep = 0.0;//MinDistance;
+ const float MaxDistance = FAR_Z_EPSILON;
+ const int MaxSteps = MAX_STEPS;
+ 
+ //	todo: raytrace wall/floor
+ 
+ 
+ float RayTraversed = 0.0;	//	world space distance
+ 
+ for ( int s=0;	s<MaxSteps;	s++ )
+ {
+  vec3 Position = Ray.Pos + Ray.Dir * RayTraversed;
+  float SceneDistance = DistanceToScene( Position, Ray.Dir );
+  float HitDistance = SceneDistance;
+  
+  RayTraversed += max( HitDistance, MinStep );
+  /*	iq version
+  if( abs(HitDistance) < (0.0001*RayTraversed) )
+  { 
+   return vec4(Position,1);
+  }
+  */
+  if ( HitDistance < CloseEnough )
+   return vec4(Position,1);
+  
+  //	ray gone too far
+  if (RayTraversed >= MaxDistance)
+   return vec4(Position,0);
+ }
+
+ //	ray never got close enough
+ return vec4(0,0,0,-1);
+}
+
+
+float RayMarchSceneOcclusion(TRay Ray)
+{
+ const float MinDistance = 0.01;
+ const float CloseEnough = MinDistance;
+ const float MinStep = MinDistance;
+ //const float MaxDistance = FAR_Z_EPSILON;
+ const int MaxSteps = MAX_STEPS;
+ 
+ float MaxDistance = length(Ray.Dir);
+ Ray.Dir = normalize(Ray.Dir);
+ 
+ //float Occlusion = 0.0;
+ float Light = 1.0;
+ float RayTraversed = 0.0;	//	world space distance
+ 
+ //	this must be relative to ShadowHardness
+ //	reverse the func
+ float MaxDistanceForShadow = ShadowHardness * 1.1;
+ 
+ for ( int s=0;	s<MaxSteps;	s++ )
+ {
+  vec3 Position = Ray.Pos + Ray.Dir * RayTraversed;
+  float SceneDistance = DistanceToScene( Position, Ray.Dir );
+  float HitDistance = SceneDistance;
+
+  
+  RayTraversed += max( HitDistance, MinStep );
+
+  if ( HitDistance < MaxDistanceForShadow )
+  {
+   //	accumulate occlusion as we go
+   //	the further down the ray, the more we accumualate the near misses
+   float Bounce = clamp( ShadowHardness * HitDistance / RayTraversed,0.0,1.0);
+   Light = min( Light, Bounce );
+   //Occlusion = max( Occlusion, Bounce );
+  }	
+
+  
+  if ( HitDistance < CloseEnough )
+  {
+   Light = 0.0;
+   break;
+  }
+  
+  //	ray gone too far, never hit anything
+  if (RayTraversed >= MaxDistance)
+  {
+   //Occlusion = 0.0;
+   break;
+  }
+  
+  if ( Light <= 0.0 )
+   break;
+ }
+ 
+ Light = clamp( Light, 0.0, 1.0 );
+ Light*Light*(3.0-2.0*Light);
+ float Occlusion = 1.0 - Light;
+ return Occlusion;
+}
+
 float MapDistance(vec3 Position)
 {
-	vec3 Dir = vec3(0,0,0);
-	return Map( Position, Dir ).x;
+ vec3 Dir = vec3(0,1,0);
+ return DistanceToScene( Position, Dir );
 }
+
 vec3 calcNormal(vec3 pos)
 {
-	vec2 e = vec2(1.0,-1.0)*0.5773;
-	const float eps = 0.0005;
-	vec3 Dir = vec3(0,0,0);
-	return normalize( e.xyy * MapDistance( pos + e.xyy*eps ) +
-					  e.yyx * MapDistance( pos + e.yyx*eps ) +
-					  e.yxy * MapDistance( pos + e.yxy*eps ) +
-					  e.xxx * MapDistance( pos + e.xxx*eps ) );
-}
-dmh_t GetRayCastDistanceHeatMaterial(vec3 RayPos,vec3 RayDir)
-{
-	float MaxDistance = FarZ;
-	float RayDistance = 0.0;
-	float HitMaterial = Mat_None;
-	float Heat = 0.0;
-	
-	for ( int s=0;	s<MAX_STEPS;	s++ )
-	{
-		Heat += 1.0/float(MAX_STEPS);
-		vec3 StepPos = RayPos + (RayDir*RayDistance);
-		dm_t StepDistanceMat = Map(StepPos,RayDir);
-		RayDistance += StepDistanceMat.x;
-		if ( RayDistance >= MaxDistance )
-		{
-			RayDistance = MaxDistance;
-			//HitMaterial = Mat_Red;
-			break;
-		}
-		if ( StepDistanceMat.x < NearSurfaceDistance )
-		{
-			HitMaterial = StepDistanceMat.y;
-			break;
-		}
-	}
-	return dmh_t( RayDistance, HitMaterial, Heat );
-}
-float ZeroOrOne(float f)
-{
-	//	or max(1.0,floor(f+0.0001)) ?
-	//return max( 1.0, f*10000.0);
-	return (f ==0.0) ? 0.0 : 1.0;
-}
-vec3 GetNormalColour(vec3 Normal)
-{
-	Normal += 1.0;
-	Normal /= 2.0;
-	return Normal;
+ //return WorldUp;
+ vec2 e = vec2(1.0,-1.0)*0.5773;
+ const float eps = 0.0005;
+ return normalize( e.xyy * MapDistance( pos + e.xyy*eps ) + 
+	  e.yyx * MapDistance( pos + e.yyx*eps ) + 
+	  e.yxy * MapDistance( pos + e.yxy*eps ) + 
+	  e.xxx * MapDistance( pos + e.xxx*eps ) );
 }
 
-vec4 GetLitColour(vec3 WorldPosition,vec3 Normal,vec3 SeedColour,float Specular)
-{
-	//return vec4(SeedColour,1.0);
-	vec3 RumBright = SeedColour * vec3(1.0/0.7,1.0/0.5,1.0/0.1);
-	vec3 RumMidTone = SeedColour;
-	vec3 Colour = RumMidTone;
-		
-	vec3 DirToLight = normalize( WorldLightPosition-WorldPosition );
-	float Dot = max(0.0,dot( DirToLight, Normal ));
-	Colour = mix( Colour, RumBright, Dot );
-	
-	//	specular
-	float DotMax = mix( 1.0, 0.96, Specular );
-	if ( Dot > DotMax )
-		Colour = vec3(1,1,1);
-		
-	return vec4( Colour, 1.0 );
-}
-vec4 GetMaterialColour(float Material,vec3 WorldPos,vec3 WorldNormal)
-{
-	if ( Material == Mat_None )		return vec4(0,0,0,0);
- //if ( Material == Mat_Green )	return GetLitColour( WorldPos, WorldNormal, GreenColour, GreenSpecular );
- //if ( Material == Mat_Red )		return GetLitColour( WorldPos, WorldNormal, RedColour, RedSpecular );
-	if ( Material == Mat_Green )	return vec4(GreenColour,1.0);
-	if ( Material == Mat_Red )		return vec4(RedColour,1.0);
-	//if ( Material == Mat_Blue )		return vec4(BlueColour,1.0);
-	if ( Material == Mat_Blue )		return GetLitColour( WorldPos, WorldNormal, BlueColour, BlueSpecular );
-
-	return GetLitColour(WorldPos,WorldNormal,PinkColour,1.0);
-}
-float softshadow( in vec3 ro, in vec3 rd, float k )
-{
-	float res = 1.0;
-	float ph = 1e20;
-	float t = 0.0;
-	for ( int i=0;	i<10;	i++ )
-	{
-		float h = MapDistance(ro + rd*t);
-		if( h<0.001 )
-			return 0.0;
-		float y = h*h/(2.0*ph);
-		float d = sqrt(h*h-y*y);
-		res = min( res, k*d/max(0.0,t-y) );
-		ph = h;
-		t += h;
-	}
-	return res;
-}
-
-float HardShadow(vec3 Position,vec3 Direction)
-{
-	vec4 HitShadow = GetRayCastDistanceHeatMaterial( Position, Direction ).xzzy;
-	return HitShadow.w > 0.0 ? 0.0 : 1.0;
-}
 
 
 void main()
 {
-	vec3 RayPos,RayDir;
-	GetWorldRay( RayPos, RayDir );
-	vec4 HitDistance = GetRayCastDistanceHeatMaterial(RayPos,RayDir).xzzy;
-	vec3 HitPos = RayPos + (RayDir*HitDistance.x);
-	
-	vec3 Normal = calcNormal(HitPos);
-	vec4 Colour = GetMaterialColour(HitDistance.w,HitPos,Normal);
-		
-	//Colour.xyz *= mix(1.0,0.7,HitDistance.y);	//	ao from heat
-		
-	vec3 ShadowRayPos = HitPos+Normal*0.1;
-	vec3 ShadowRayDir = normalize(WorldLightPosition-HitPos);
+ TRay Ray;
+ GetWorldRay(Ray.Pos,Ray.Dir);
+ vec4 Colour = vec4(BackgroundColour,0.0);
+ 
+ vec4 HitPos_Valid = RayMarchScene(Ray);
+/*
+  if ( HitPos_Valid.w > 0.0 )
+ {
+	FragColor = vec4(0,1,0,1);
+}
+else
+{
+	FragColor = vec4(1,0,0,1);
+}
+return;
+ */
 
-	float Light = 0.0;
+ if ( HitPos_Valid.w > 0.0 )
+ {
+  vec3 HitPos = HitPos_Valid.xyz;
+  vec3 Normal = calcNormal(HitPos);
+  float StepAwayFromSurface = BounceSurfaceDistance;
+  
+  Colour = vec4( HitPos, 1.0 );
+  Colour = vec4( abs(HitPos), 1.0 );
+  //Colour = vec4( abs(Normal),1.0);
+  
+  bool ApplyHardOcclusion = false;
+  float ShadowMult = 0.0;	//	shadow colour
+  
+  if ( ApplyHardOcclusion )
+  {
+   TRay OcclusionRay;
+   OcclusionRay.Pos = HitPos+Normal*StepAwayFromSurface;
+   OcclusionRay.Dir = WorldLightPosition - HitPos;
+   float Occlusion = RayMarchSceneOcclusion( OcclusionRay );
+   Colour.xyz = mix( Colour.xyz, vec3(ShadowMult), Occlusion );
+   Colour.xyz = vec3( Occlusion, Occlusion, Occlusion );
+   //Colour.xyz = normalize(OcclusionRay.Dir);
+  }
 
-	//float Shadow = softshadow( ShadowRayPos, ShadowRayDir, ShadowK );
-	float Shadow = HardShadow( ShadowRayPos, ShadowRayDir );
-Shadow = 1.0;
-	Light += Shadow * 0.5;
+ }
+ 
+ //	render gizmos
+ int Gizmo = GetGizmo( Ray, HitPos_Valid );
+ Colour.xyz = ApplyGizmoColour(Gizmo,Colour.xyz);
+ /*
+ 
+ //	vignette
+ float Vignette = pow( 16.0*uv.x*uv.y*(1.0-uv.x)*(1.0-uv.y), VignettePow );
+ Colour.xyz *= Vignette;
+ */
+ FragColor = vec4(Colour.xyz,1.0);
 
-	Colour.xyz = Colour.xyz * Light;
-	FragColor = Colour;
-
-	if ( Colour.w == 0.0 )	discard;
 }
 `;
