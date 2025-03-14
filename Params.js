@@ -23,7 +23,7 @@ Params.LightZ = 6;
 Params.LightRadius = 0.1;
 Params.ShadowHardness = 2.1;
 Params.VignettePow = 0.15;
-Params.RenderFloor = false;
+Params.RenderFloor = true;
 Params.RenderWall = false;
 
 export const Meta = {};

@@ -450,11 +450,12 @@ float RayMarchSceneOcclusion(TRay Ray)
  
  //	this must be relative to ShadowHardness
  //	reverse the func
- float MaxDistanceForShadow = ShadowHardness * 1.1;
+ //float MaxDistanceForShadow = ShadowHardness * 1.1;
+ float MaxDistanceForShadow = MaxDistance;
  
  for ( int s=0;	s<MaxSteps;	s++ )
  {
-  vec3 Position = Ray.Pos + Ray.Dir * RayTraversed;
+  vec3 Position = Ray.Pos + (Ray.Dir * RayTraversed);
   float SceneDistance = DistanceToScene( Position, Ray.Dir );
   float HitDistance = SceneDistance;
 
@@ -539,20 +540,20 @@ return;
   float StepAwayFromSurface = BounceSurfaceDistance;
   
   Colour = vec4( HitPos, 1.0 );
-  Colour = vec4( abs(HitPos), 1.0 );
-  //Colour = vec4( abs(Normal),1.0);
+  //Colour = vec4( abs(HitPos), 1.0 );
+  Colour = vec4( abs(Normal),1.0);
   
-  bool ApplyHardOcclusion = false;
+  bool ApplyHardOcclusion = true;
   float ShadowMult = 0.0;	//	shadow colour
   
   if ( ApplyHardOcclusion )
   {
    TRay OcclusionRay;
    OcclusionRay.Pos = HitPos+Normal*StepAwayFromSurface;
+	//	length of this ray is used as max distance, as we dont wanna go further than the light
    OcclusionRay.Dir = WorldLightPosition - HitPos;
    float Occlusion = RayMarchSceneOcclusion( OcclusionRay );
    Colour.xyz = mix( Colour.xyz, vec3(ShadowMult), Occlusion );
-   Colour.xyz = vec3( Occlusion, Occlusion, Occlusion );
    //Colour.xyz = normalize(OcclusionRay.Dir);
   }
 

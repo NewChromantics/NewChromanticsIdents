@@ -76,8 +76,10 @@ export async function OnLoadPopEngineCanvas(Canvas)
 	FontSdf_FuturaBold = await LoadSdfFont('FuturaBold');
 	FontSdf_FuturaBold = await LoadSdfFont('FuturaBold_TNC');
 	
-	Canvas.Renderer.Camera.LookAt = [0,0,0];
-	Canvas.Renderer.Camera.Position = [0,1,3];
+	const Camera = Canvas.Renderer.Camera;
+	Camera.LookAt = [0,0,0];
+	Camera.Position = [0,3,3];
+	Camera.Up = [0,-1,0];
 	
 	PopEngineCanvas = Canvas;
 	PopEngineCanvas.ongetrendercommands = GetRenderCommands;
